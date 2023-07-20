@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/abcxyz/pkg/cli"
@@ -48,14 +50,32 @@ Usage: {{ COMMAND }} [options]
 `
 }
 
+var rootCmd = func() cli.Command {
+	return &cli.RootCommand{
+		Name: "send-google-chat-webhook",
+		Commands: map[string]cli.CommandFactory{
+			"chat": func() cli.Command {
+				return &cli.RootCommand{
+					Name:        "workflownotification",
+					Description: "notification for workflow",
+					Commands: map[string]cli.CommandFactory{
+						"workflownotification": func() cli.Command {
+							return &WorkflowNotificationCommand{}
+						},
+					},
+				}
+			},
+		},
+	}
+}
+
 func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
 	set := cli.NewFlagSet()
 
 	f := set.NewSection("Chat space options")
 
 	f.StringVar(&cli.StringVar{
-		Name:    "webhook_url",
-		Aliases: []string{"w"},
+		Name:    "webhook-url",
 		Example: "https://chat.goog...",
 		Default: "",
 		Target:  &c.flagWebhookUrl,
@@ -94,70 +114,50 @@ func (c *WorkflowNotificationCommand) Run(ctx context.Context, args []string) er
 		return fmt.Errorf("failed unmarshaling %s: %w", jobContextEnv, err)
 	}
 
-	b, err := messageBody(ghJson, jobJson)
+	b, err := generateMessageBody(ghJson, jobJson, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to generate message body: %w", err)
 	}
 
 	url := c.flagWebhookUrl
-	fmt.Println("url: ", url)
 
-	request, err := http.NewRequest("POST", url, bytes.NewBuffer(b))
+	request, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(b))
 	if err != nil {
 		return fmt.Errorf("creating http request failed: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(request)
+
+	client := http.Client{}
+	resp, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("sending http request failed: %w", err)
 	}
-	fmt.Println("resp: ", resp)
+
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status code %d (%s)", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 
 	return nil
 }
 
 func main() {
-	if err := realMain(); err != nil {
+	ctx, done := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM)
+	defer done()
+
+	if err := realMain(ctx); err != nil {
+		done()
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 }
 
-func realMain() error {
-	rootCmd := func() cli.Command {
-		return &cli.RootCommand{
-			Name: "send-google-chat-webhook",
-			Commands: map[string]cli.CommandFactory{
-				"chat": func() cli.Command {
-					return &cli.RootCommand{
-						Name:        "workflownotification",
-						Description: "notification for workflow",
-						Commands: map[string]cli.CommandFactory{
-							"workflownotification": func() cli.Command {
-								return &WorkflowNotificationCommand{}
-							},
-						},
-					}
-				},
-			},
-		}
-	}
-
-	cmd := rootCmd()
-	// Help output is written to stderr by default. Redirect to stdout so the
-	// "Output" assertion works.
-	cmd.SetStderr(os.Stdout)
-
-	ctx := context.Background()
-	err := cmd.Run(ctx, os.Args[1:])
-	if err != nil {
-		return fmt.Errorf("failed to run command: %w", err)
-	}
-
-	return nil
+func realMain(ctx context.Context) error {
+	return rootCmd().Run(ctx, os.Args[1:]) //nolint:wrapcheck // Want passthrough
 }
 
-func messageBody(ghJson, jobJson map[string]any) ([]byte, error) {
+func generateMessageBody(ghJson, jobJson map[string]any, timestamp time.Time) ([]byte, error) {
 	timezoneLoc, _ := time.LoadLocation("America/Los_Angeles")
 
 	var iconUrl string
@@ -204,7 +204,7 @@ func messageBody(ghJson, jobJson map[string]any) ([]byte, error) {
 									"startIcon": map[string]any{
 										"knownIcon": "CLOCK",
 									},
-									"text": fmt.Sprintf("<b>Pacific:</b> %s", time.Now().In(timezoneLoc).Format(time.DateTime)),
+									"text": fmt.Sprintf("<b>Pacific:</b> %s", timestamp.In(timezoneLoc).Format(time.DateTime)),
 								},
 							},
 							{
@@ -212,7 +212,7 @@ func messageBody(ghJson, jobJson map[string]any) ([]byte, error) {
 									"startIcon": map[string]any{
 										"knownIcon": "CLOCK",
 									},
-									"text": fmt.Sprintf("<b>UTC:</b> %s", time.Now().UTC().Format(time.DateTime)),
+									"text": fmt.Sprintf("<b>UTC:</b> %s", timestamp.UTC().Format(time.DateTime)),
 								},
 							},
 							{
