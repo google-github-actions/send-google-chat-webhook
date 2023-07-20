@@ -33,23 +33,6 @@ const (
 	jobContextEnv    = "JOB_CONTEXT"
 )
 
-type WorkflowNotificationCommand struct {
-	cli.BaseCommand
-	flagWebhookUrl string
-}
-
-func (c *WorkflowNotificationCommand) Desc() string {
-	return "Send a message to a Chat space"
-}
-
-func (c *WorkflowNotificationCommand) Help() string {
-	return `
-Usage: {{ COMMAND }} [options]
-
-  The chat command sends messages to Chat spaces.
-`
-}
-
 var rootCmd = func() cli.Command {
 	return &cli.RootCommand{
 		Name: "send-google-chat-webhook",
@@ -69,6 +52,23 @@ var rootCmd = func() cli.Command {
 	}
 }
 
+type WorkflowNotificationCommand struct {
+	cli.BaseCommand
+	flagWebhookUrl string
+}
+
+func (c *WorkflowNotificationCommand) Desc() string {
+	return "Send a message to a Google Chat space"
+}
+
+func (c *WorkflowNotificationCommand) Help() string {
+	return `
+Usage: {{ COMMAND }} [options]
+
+  The chat command sends messages to Google Chat spaces.
+`
+}
+
 func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
 	set := cli.NewFlagSet()
 
@@ -76,7 +76,7 @@ func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
 
 	f.StringVar(&cli.StringVar{
 		Name:    "webhook-url",
-		Example: "https://chat.goog...",
+		Example: "https://chat.googleapis.com/v1/spaces/<SPACE_ID>/messages?key=<KEY>&token=<TOKEN>",
 		Default: "",
 		Target:  &c.flagWebhookUrl,
 		Usage:   `Webhook URL from google chat`,
@@ -126,16 +126,15 @@ func (c *WorkflowNotificationCommand) Run(ctx context.Context, args []string) er
 		return fmt.Errorf("creating http request failed: %w", err)
 	}
 
-	client := http.Client{}
+	client := &http.Client{}
 	resp, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("sending http request failed: %w", err)
 	}
-
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected HTTP status code %d (%s)", resp.StatusCode, http.StatusText(resp.StatusCode))
+	if got, want := resp.StatusCode, http.StatusOK; got != want {
+		return fmt.Errorf("unexpected HTTP status code %d (%s)", got, http.StatusText(got))
 	}
 
 	return nil

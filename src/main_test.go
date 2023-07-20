@@ -215,7 +215,6 @@ func TestGenerateMessageBody(t *testing.T) {
 			if diff := cmp.Diff(wantMessageBodyByte, gotMessageBody); diff != "" {
 				t.Errorf("messageBody got unexpected diff (-want, +got):\n%s", diff)
 			}
-
 		})
 	}
 }
