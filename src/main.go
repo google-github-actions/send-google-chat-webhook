@@ -70,14 +70,13 @@ Usage: {{ COMMAND }} [options]
 }
 
 func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
-	set := cli.NewFlagSet()
+	set := c.NewFlagSet()
 
-	f := set.NewSection("Chat space options")
+	f := set.NewSection("CHAT SPACE OPTIONS")
 
 	f.StringVar(&cli.StringVar{
 		Name:    "webhook-url",
 		Example: "https://chat.googleapis.com/v1/spaces/<SPACE_ID>/messages?key=<KEY>&token=<TOKEN>",
-		Default: "",
 		Target:  &c.flagWebhookUrl,
 		Usage:   `Webhook URL from google chat`,
 	})
@@ -96,11 +95,11 @@ func (c *WorkflowNotificationCommand) Run(ctx context.Context, args []string) er
 		return fmt.Errorf("expected 0 arguments, got %q", args)
 	}
 
-	ghJsonStr := os.Getenv(githubContextEnv)
+	ghJsonStr := c.GetEnv(githubContextEnv)
 	if ghJsonStr == "" {
 		return fmt.Errorf("environment var %s not set", githubContextEnv)
 	}
-	jobJsonStr := os.Getenv(jobContextEnv)
+	jobJsonStr := c.GetEnv(jobContextEnv)
 	if jobJsonStr == "" {
 		return fmt.Errorf("environment var %s not set", jobContextEnv)
 	}
