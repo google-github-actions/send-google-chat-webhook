@@ -72,7 +72,7 @@ Usage: {{ COMMAND }} [options]
 func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
 	set := c.NewFlagSet()
 
-	f := set.NewSection("CHAT SPACE OPTIONS")
+	f := set.NewSection("COMMAND OPTIONS")
 
 	f.StringVar(&cli.StringVar{
 		Name:    "webhook-url",
