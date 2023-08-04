@@ -1,0 +1,70 @@
+# Copyright 2023 The Authors (see AUTHORS file)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: 'send-google-chat-webhhook'
+inputs:
+  webhook_url: 
+    description: "chat space webhook url"
+    type: 'string'
+    required: true
+  mention:
+    description: "mention people or not, format <users/user_id>"
+    type: 'string'
+    default: '<users/all>'
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'download binary'
+      shell: 'bash'
+      env:
+        BINARY_NAME: "send-google-chat-webhook"
+        # manully update VERSION after each release
+        # VERSION should not contain v.
+        VERSION: "0.0.1"
+      run: |-
+        case "${RUNNER_OS}" in
+          "Linux")
+            CURL_OS="linux"
+          ;;
+          "macOS")
+            CURL_OS="darwin"
+          ;;
+          "Windows")
+            CURL_OS="windows"
+        esac
+
+        case "${RUNNER_ARCH}" in
+          "X64")
+            CURL_ARCH="amd64"
+          ;;
+          "arm64")
+            CURL_ARCH="arm64"
+          ;;
+        esac
+
+        curl -LOv "https://github.com/google-github-actions/send-google-chat-webhook/releases/download/v${{ env.VERSION }}/send-google-chat-webhook_${{ env.VERSION }}_${CURL_OS}_${CURL_ARCH}.tar.gz"
+        tar xzf ${{ env.BINARY_NAME }}_${{ env.VERSION }}_${CURL_OS}_${CURL_ARCH}.tar.gz
+    - name: "send message via cli"
+      shell: 'bash'
+      run: |
+        ./${{ env.BINARY_NAME }} chat workflownotification --webhook_url="${{ inputs.webhook_url }}"
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+        JOB_CONTEXT: ${{ toJson(job) }}
+        STEPS_CONTEXT: ${{ toJson(steps) }}
+        RUNNER_CONTEXT: ${{ toJson(runner) }}
+        STRATEGY_CONTEXT: ${{ toJson(strategy) }}
+        MATRIX_CONTEXT: ${{ toJson(matrix) }}
