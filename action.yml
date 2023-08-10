@@ -60,7 +60,7 @@ runs:
     - name: "send message via cli"
       shell: 'bash'
       run: |
-        ./${{ env.BINARY_NAME }} chat workflownotification --webhook_url="${{ inputs.webhook_url }}"
+        ./send-google-chat-webhook chat workflownotification --webhook_url="${{ inputs.webhook_url }}"
       env:
         GITHUB_CONTEXT: ${{ toJson(github) }}
         JOB_CONTEXT: ${{ toJson(job) }}
