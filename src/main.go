@@ -321,8 +321,6 @@ func generateRequestBody(m *messageBodyContent) ([]byte, error) {
 		},
 	}
 
-	fmt.Println(jsonData)
-
 	res, err := json.Marshal(jsonData)
 	if err != nil {
 		return nil, fmt.Errorf("error marshal jsonData: %w", err)
