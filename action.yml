@@ -13,14 +13,13 @@
 # limitations under the License.
 
 name: 'send-google-chat-webhhook'
+description: "send message to your google chat workspace"
 inputs:
   webhook_url: 
     description: "chat space webhook url"
-    type: 'string'
     required: true
   mention:
     description: "mention people or not, format <users/user_id>"
-    type: 'string'
     default: '<users/all>'
     required: false
 

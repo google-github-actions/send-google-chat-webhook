@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,8 +30,22 @@ import (
 )
 
 const (
-	githubContextEnv = "GITHUB_CONTEXT"
-	jobContextEnv    = "JOB_CONTEXT"
+	githubContextEnvKey               = "GITHUB_CONTEXT"
+	jobContextEnvKey                  = "JOB_CONTEXT"
+	githubContextRefKey               = "ref"
+	githubContextRepositoryKey        = "repository"
+	githubContextTriggeringActorKey   = "triggering_actor"
+	githubContextEventObjectActionKey = "action"
+	githubContextEventNameKey         = "event_name"
+	githubContextEventKey             = "event"
+	githubContextEventURLKey          = "html_url"
+	githubEventContenntCreatedAtKey   = "created_at"
+)
+
+const (
+	successHeaderIconURL = "https://github.githubassets.com/favicons/favicon.png"
+	failureHeaderIconURL = "https://github.githubassets.com/favicons/favicon-failure.png"
+	widgetRefIconURL     = "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/quick_reference/default/48px.svg"
 )
 
 var rootCmd = func() cli.Command {
@@ -54,7 +69,7 @@ var rootCmd = func() cli.Command {
 
 type WorkflowNotificationCommand struct {
 	cli.BaseCommand
-	flagWebhookUrl string
+	flagWebhookURL string
 }
 
 func (c *WorkflowNotificationCommand) Desc() string {
@@ -77,7 +92,7 @@ func (c *WorkflowNotificationCommand) Flags() *cli.FlagSet {
 	f.StringVar(&cli.StringVar{
 		Name:    "webhook-url",
 		Example: "https://chat.googleapis.com/v1/spaces/<SPACE_ID>/messages?key=<KEY>&token=<TOKEN>",
-		Target:  &c.flagWebhookUrl,
+		Target:  &c.flagWebhookURL,
 		Usage:   `Webhook URL from google chat`,
 	})
 
@@ -95,30 +110,30 @@ func (c *WorkflowNotificationCommand) Run(ctx context.Context, args []string) er
 		return fmt.Errorf("expected 0 arguments, got %q", args)
 	}
 
-	ghJsonStr := c.GetEnv(githubContextEnv)
-	if ghJsonStr == "" {
-		return fmt.Errorf("environment var %s not set", githubContextEnv)
+	ghJSONStr := c.GetEnv(githubContextEnvKey)
+	if ghJSONStr == "" {
+		return fmt.Errorf("environment var %s not set", githubContextEnvKey)
 	}
-	jobJsonStr := c.GetEnv(jobContextEnv)
-	if jobJsonStr == "" {
-		return fmt.Errorf("environment var %s not set", jobContextEnv)
-	}
-
-	ghJson := map[string]any{}
-	jobJson := map[string]any{}
-	if err := json.Unmarshal([]byte(ghJsonStr), &ghJson); err != nil {
-		return fmt.Errorf("failed unmarshaling %s: %w", githubContextEnv, err)
-	}
-	if err := json.Unmarshal([]byte(jobJsonStr), &jobJson); err != nil {
-		return fmt.Errorf("failed unmarshaling %s: %w", jobContextEnv, err)
+	jobJSONStr := c.GetEnv(jobContextEnvKey)
+	if jobJSONStr == "" {
+		return fmt.Errorf("environment var %s not set", jobContextEnvKey)
 	}
 
-	b, err := generateMessageBody(ghJson, jobJson, time.Now())
+	ghJSON := map[string]any{}
+	jobJSON := map[string]any{}
+	if err := json.Unmarshal([]byte(ghJSONStr), &ghJSON); err != nil {
+		return fmt.Errorf("failed unmarshaling %s: %w", githubContextEnvKey, err)
+	}
+	if err := json.Unmarshal([]byte(jobJSONStr), &jobJSON); err != nil {
+		return fmt.Errorf("failed unmarshaling %s: %w", jobContextEnvKey, err)
+	}
+
+	b, err := generateRequestBody(generateMessageBodyContent(ghJSON, jobJSON, time.Now()))
 	if err != nil {
 		return fmt.Errorf("failed to generate message body: %w", err)
 	}
 
-	url := c.flagWebhookUrl
+	url := c.flagWebhookURL
 
 	request, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(b))
 	if err != nil {
@@ -133,7 +148,12 @@ func (c *WorkflowNotificationCommand) Run(ctx context.Context, args []string) er
 	defer resp.Body.Close()
 
 	if got, want := resp.StatusCode, http.StatusOK; got != want {
-		return fmt.Errorf("unexpected HTTP status code %d (%s)", got, http.StatusText(got))
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read")
+		}
+		bodyString := string(bodyBytes)
+		return fmt.Errorf("unexpected HTTP status code %d (%s)\n got body: %s", got, http.StatusText(got), bodyString)
 	}
 
 	return nil
@@ -155,38 +175,113 @@ func realMain(ctx context.Context) error {
 	return rootCmd().Run(ctx, os.Args[1:]) //nolint:wrapcheck // Want passthrough
 }
 
-func generateMessageBody(ghJson, jobJson map[string]any, timestamp time.Time) ([]byte, error) {
-	timezoneLoc, _ := time.LoadLocation("America/Los_Angeles")
+// messageBodyContent defines the necessary fields for generating the request body.
+type messageBodyContent struct {
+	title           string
+	subtitle        string
+	ref             string
+	triggeringActor string
+	timestamp       string
+	clickURL        string
+	headerIconURL   string
+	eventName       string
+	repo            string
+}
 
-	var iconUrl string
-	switch jobJson["status"] {
-	case "success":
-		iconUrl = "https://github.githubassets.com/favicons/favicon.png"
-	default:
-		iconUrl = "https://github.githubassets.com/favicons/favicon-failure.png"
+// generateMessageBodyContent returns messageBodyContent for generating the request body.
+// using currentTimestamp as a input is for easier testing on default case.
+func generateMessageBodyContent(ghJSON, jobJSON map[string]any, currentTimeStamp time.Time) *messageBodyContent {
+	event, ok := ghJSON[githubContextEventKey].(map[string]any)
+	if !ok {
+		event = map[string]any{}
 	}
+	eventName := getMapFieldStringValue(ghJSON, githubContextEventNameKey)
+	switch eventName {
+	case "issues":
+		issueContent, ok := event["issue"].(map[string]any)
+		if !ok {
+			issueContent = map[string]any{}
+		}
+		return &messageBodyContent{
+			title:           fmt.Sprintf("A issue is %s", getMapFieldStringValue(event, githubContextEventObjectActionKey)),
+			subtitle:        fmt.Sprintf("Issue title: <b>%s</b>", getMapFieldStringValue(issueContent, "title")),
+			ref:             getMapFieldStringValue(ghJSON, githubContextRefKey),
+			triggeringActor: getMapFieldStringValue(ghJSON, githubContextTriggeringActorKey),
+			timestamp:       getMapFieldStringValue(issueContent, githubEventContenntCreatedAtKey),
+			clickURL:        getMapFieldStringValue(issueContent, githubContextEventURLKey),
+			eventName:       "issue",
+			repo:            getMapFieldStringValue(ghJSON, githubContextRepositoryKey),
+			headerIconURL:   successHeaderIconURL,
+		}
+	case "release":
+		releaseContent, ok := event["release"].(map[string]any)
+		if !ok {
+			releaseContent = map[string]any{}
+		}
+		return &messageBodyContent{
+			title:           fmt.Sprintf("A release is %s", getMapFieldStringValue(event, githubContextEventObjectActionKey)),
+			subtitle:        fmt.Sprintf("Release name: <b>%s</b>", getMapFieldStringValue(releaseContent, "name")),
+			ref:             getMapFieldStringValue(ghJSON, githubContextRefKey),
+			triggeringActor: getMapFieldStringValue(ghJSON, githubContextTriggeringActorKey),
+			timestamp:       getMapFieldStringValue(releaseContent, githubEventContenntCreatedAtKey),
+			clickURL:        getMapFieldStringValue(releaseContent, githubContextEventURLKey),
+			eventName:       "release",
+			repo:            getMapFieldStringValue(ghJSON, githubContextRepositoryKey),
+			headerIconURL:   successHeaderIconURL,
+		}
+	default:
+		res := &messageBodyContent{
+			title:           fmt.Sprintf("GitHub workflow %s", getMapFieldStringValue(jobJSON, "status")),
+			subtitle:        fmt.Sprintf("Workflow: <b>%s</b>", getMapFieldStringValue(ghJSON, "workflow")),
+			ref:             getMapFieldStringValue(ghJSON, githubContextRefKey),
+			triggeringActor: getMapFieldStringValue(ghJSON, githubContextTriggeringActorKey),
+			// The key for getting timestamp is different in differnet triggering event
+			// a simple work around is using the new timestamp.
+			timestamp: currentTimeStamp.UTC().Format(time.RFC3339),
+			clickURL:  fmt.Sprintf("https://github.com/%s/actions/runs/%s", getMapFieldStringValue(ghJSON, githubContextRepositoryKey), getMapFieldStringValue(ghJSON, "run_id")),
+			eventName: "workflow",
+			repo:      getMapFieldStringValue(ghJSON, githubContextRepositoryKey),
+		}
+		v, ok := jobJSON["status"]
+		if !ok || v == "failure" || v == "canceled" {
+			res.headerIconURL = failureHeaderIconURL
+		} else {
+			res.headerIconURL = successHeaderIconURL
+		}
+		return res
+	}
+}
 
+// generateRequestBody returns the body of the request.
+func generateRequestBody(m *messageBodyContent) ([]byte, error) {
 	jsonData := map[string]any{
 		"cardsV2": map[string]any{
 			"cardId": "createCardMessage",
 			"card": map[string]any{
 				"header": map[string]any{
-					"title":    fmt.Sprintf("GitHub workflow %s", jobJson["status"]),
-					"subtitle": fmt.Sprintf("Workflow: <b>%s</b>", ghJson["workflow"]),
-					"imageUrl": iconUrl,
+					"title":    m.title,
+					"subtitle": m.subtitle,
+					"imageUrl": m.headerIconURL,
 				},
 				"sections": []any{
 					map[string]any{
-						// "header":                    "This is the section header",
 						"collapsible":               true,
 						"uncollapsibleWidgetsCount": 1,
 						"widgets": []map[string]any{
 							{
 								"decoratedText": map[string]any{
 									"startIcon": map[string]any{
-										"iconUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/quick_reference/default/48px.svg",
+										"iconUrl": widgetRefIconURL,
 									},
-									"text": fmt.Sprintf("<b>Ref:</b> %s", ghJson["ref"]),
+									"text": fmt.Sprintf("<b>Repo: </b> %s", m.repo),
+								},
+							},
+							{
+								"decoratedText": map[string]any{
+									"startIcon": map[string]any{
+										"iconUrl": widgetRefIconURL,
+									},
+									"text": fmt.Sprintf("<b>Ref: </b> %s", m.ref),
 								},
 							},
 							{
@@ -194,7 +289,7 @@ func generateMessageBody(ghJson, jobJson map[string]any, timestamp time.Time) ([
 									"startIcon": map[string]any{
 										"knownIcon": "PERSON",
 									},
-									"text": fmt.Sprintf("<b>Run by:</b> %s", ghJson["triggering_actor"]),
+									"text": fmt.Sprintf("<b>Actor: </b> %s", m.triggeringActor),
 								},
 							},
 							{
@@ -202,26 +297,17 @@ func generateMessageBody(ghJson, jobJson map[string]any, timestamp time.Time) ([
 									"startIcon": map[string]any{
 										"knownIcon": "CLOCK",
 									},
-									"text": fmt.Sprintf("<b>Pacific:</b> %s", timestamp.In(timezoneLoc).Format(time.DateTime)),
-								},
-							},
-							{
-								"decoratedText": map[string]any{
-									"startIcon": map[string]any{
-										"knownIcon": "CLOCK",
-									},
-									"text": fmt.Sprintf("<b>UTC:</b> %s", timestamp.UTC().Format(time.DateTime)),
+									"text": fmt.Sprintf("<b>UTC: </b> %s", m.timestamp),
 								},
 							},
 							{
 								"buttonList": map[string]any{
 									"buttons": []any{
 										map[string]any{
-											"text": "Open",
+											"text": fmt.Sprintf("Open %s", m.eventName),
 											"onClick": map[string]any{
 												"openLink": map[string]any{
-													"url": fmt.Sprintf("https://github.com/%s/actions/runs/%s",
-														ghJson["repository"], ghJson["run_id"]),
+													"url": m.clickURL,
 												},
 											},
 										},
@@ -235,5 +321,23 @@ func generateMessageBody(ghJson, jobJson map[string]any, timestamp time.Time) ([
 		},
 	}
 
-	return json.Marshal(jsonData)
+	fmt.Println(jsonData)
+
+	res, err := json.Marshal(jsonData)
+	if err != nil {
+		return nil, fmt.Errorf("error marshal jsonData: %w", err)
+	}
+	return res, nil
+}
+
+// getMapFieldStringValue get value from a map[sting]any map.
+// And convert it into string type. Return empty if the conversion failed.
+// The keys should all exist as they are popluated by github, to simple the
+// code on unnecessary error handling, a empty string is returned.
+func getMapFieldStringValue(m map[string]any, key string) string {
+	v, ok := m[key].(string)
+	if !ok {
+		v = ""
+	}
+	return v
 }
