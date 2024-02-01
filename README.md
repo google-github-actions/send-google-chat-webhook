@@ -26,8 +26,8 @@ jobs:
     steps:
     # ...
 
-    - id: 'notify google chat'
-      uses: 'google-github-actions/sent-google-chat-webhook@v0.0.1'
+    - id: 'notify_google_chat'
+      uses: 'google-github-actions/send-google-chat-webhook@v0.0.2'
       with:
         webhook_url: '${{ secrets.WEBHOOK_URL }}'
         mention: "<users/all>"
@@ -38,7 +38,7 @@ You can customize the condition for when you want this action is called..
 ```yaml
 - id: 'notify google chat'
   if: ${{ inputs.fail_intentionally }}
-  uses: 'google-github-actions/sent-google-chat-webhook@v0.0.1'
+  uses: 'google-github-actions/send-google-chat-webhook@v0.0.2'
   with:
     webhook_url: '${{ secrets.WEBHOOK_URL }}'
     mention: "<users/all>"
