@@ -32,7 +32,7 @@ runs:
         BINARY_NAME: "send-google-chat-webhook"
         # manully update VERSION after each release
         # VERSION should not contain v.
-        VERSION: "0.0.2"
+        VERSION: "0.0.4"
       run: |-
         case "${RUNNER_OS}" in
           "Linux")
