@@ -33,4 +33,6 @@ jobs:
           version: 'latest'
           args: 'release --clean'
         env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          # PAT token needed to allow for subsequent automation for publishing immuatable package
+          # The default GitHub token doesn't allow triggering of additional workflows
+          GITHUB_TOKEN: '${{ secrets.ACTIONS_BOT_TOKEN }}'
