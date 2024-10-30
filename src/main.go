@@ -40,6 +40,7 @@ const (
 	githubContextEventKey             = "event"
 	githubContextEventURLKey          = "html_url"
 	githubEventContenntCreatedAtKey   = "created_at"
+	githubContextServerURLKey         = "server_url"
 )
 
 const (
@@ -238,7 +239,7 @@ func generateMessageBodyContent(ghJSON, jobJSON map[string]any, currentTimeStamp
 			// The key for getting timestamp is different in differnet triggering event
 			// a simple work around is using the new timestamp.
 			timestamp: currentTimeStamp.UTC().Format(time.RFC3339),
-			clickURL:  fmt.Sprintf("https://github.com/%s/actions/runs/%s", getMapFieldStringValue(ghJSON, githubContextRepositoryKey), getMapFieldStringValue(ghJSON, "run_id")),
+			clickURL:  fmt.Sprintf("%s/%s/actions/runs/%s", getMapFieldStringValue(ghJSON, githubContextServerURLKey), getMapFieldStringValue(ghJSON, githubContextRepositoryKey), getMapFieldStringValue(ghJSON, "run_id")),
 			eventName: "workflow",
 			repo:      getMapFieldStringValue(ghJSON, githubContextRepositoryKey),
 		}
