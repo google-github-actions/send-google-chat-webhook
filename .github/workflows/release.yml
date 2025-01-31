@@ -17,18 +17,18 @@ on:
   push:
     tags:
       - 'v*'
-permissions:
-  contents: 'write'
-  packages: 'write'
+
 jobs:
   release:
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: 'actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b' # ratchet:actions/checkout@v3
+      - uses: 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683' # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: 'actions/setup-go@84cbf8094393cdc5fe1fe1671ff2647332956b1a' # ratchet:actions/setup-go@v3
-      - uses: 'goreleaser/goreleaser-action@b953231f81b8dfd023c58e0854a721e35037f28b' # ratchet:goreleaser/goreleaser-action@v2
+
+      - uses: 'actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34' # ratchet:actions/setup-go@v5
+
+      - uses: 'goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf' # ratchet:goreleaser/goreleaser-action@v6
         with:
           version: 'latest'
           args: 'release --clean'
