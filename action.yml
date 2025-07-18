@@ -13,13 +13,15 @@
 # limitations under the License.
 
 name: 'send-google-chat-webhhook'
-description: "send message to your google chat workspace"
+description: 'Send message to your google chat workspace'
 inputs:
-  webhook_url: 
-    description: "chat space webhook url"
+  webhook_url:
+    description: |-
+      Chat space webhook url
     required: true
   mention:
-    description: "mention people or not, format <users/user_id>"
+    description: |-
+      Mention people or not, format <users/user_id>
     default: '<users/all>'
     required: false
 
@@ -29,10 +31,10 @@ runs:
     - name: 'download binary'
       shell: 'bash'
       env:
-        BINARY_NAME: "send-google-chat-webhook"
+        BINARY_NAME: 'send-google-chat-webhook'
         # manully update VERSION after each release
         # VERSION should not contain v.
-        VERSION: "0.0.4"
+        VERSION: '0.0.4'
       run: |-
         case "${RUNNER_OS}" in
           "Linux")
@@ -56,14 +58,16 @@ runs:
 
         curl -LOv "https://github.com/google-github-actions/send-google-chat-webhook/releases/download/v${{ env.VERSION }}/send-google-chat-webhook_${{ env.VERSION }}_${CURL_OS}_${CURL_ARCH}.tar.gz"
         tar xzf ${{ env.BINARY_NAME }}_${{ env.VERSION }}_${CURL_OS}_${CURL_ARCH}.tar.gz
-    - name: "send message via cli"
+
+    - name: 'send message via cli'
       shell: 'bash'
-      run: |
-        ./send-google-chat-webhook chat workflownotification --webhook-url="${{ inputs.webhook_url }}"
       env:
-        GITHUB_CONTEXT: ${{ toJson(github) }}
-        JOB_CONTEXT: ${{ toJson(job) }}
-        STEPS_CONTEXT: ${{ toJson(steps) }}
-        RUNNER_CONTEXT: ${{ toJson(runner) }}
-        STRATEGY_CONTEXT: ${{ toJson(strategy) }}
-        MATRIX_CONTEXT: ${{ toJson(matrix) }}
+        GITHUB_CONTEXT: '${{ toJson(github) }}'
+        JOB_CONTEXT: '${{ toJson(job) }}'
+        STEPS_CONTEXT: '${{ toJson(steps) }}'
+        RUNNER_CONTEXT: '${{ toJson(runner) }}'
+        STRATEGY_CONTEXT: '${{ toJson(strategy) }}'
+        MATRIX_CONTEXT: '${{ toJson(matrix) }}'
+        WEBHOOK_URL: '${{ inputs.webhook_url }}'
+      run: |-
+        ./send-google-chat-webhook chat workflownotification --webhook-url="${WEBHOOK_URL}"
